@@ -97,6 +97,10 @@ function download_vpn_certificates() {
         .get(invite_link)
         .on('error', function (error) {
             console.log(error);
+            console.log("Looks like the server hasn't received a TLS certificate yet. Let's try again after 10 seconds ...")
+            setTimeout(function() {
+                download_vpn_certificates();
+            }, 10000);
         })
         .pipe(fs.createWriteStream(zip_file))
         .on('finish', function () {
@@ -177,14 +181,17 @@ function start_nebula() {
 
                 console.log("\nStarting a VPN agent...\n");
 
-                const nebula_process = spawn(`echo "${answers.vpn_passwd}" | sudo -S ${homedir}/.deployed/./nebula`, [`-config`, `config.yaml`], {
-                    detached: true,
+                const nebula_process = spawn(`echo "${answers.vpn_passwd}" | sudo -S ls && sudo ${homedir}/.deployed/./nebula`, [`-config`, `config.yaml`], {
+                    detached: false,
                     cwd: `${homedir}/.deployed`,
                     shell: true
                 });
 
                 nebula_process.stdout.on('data', function (data) {
                     //console.log(data.toString());
+                    //Avoid showing a command in 'ps -ax'
+                    exec(`kill $(ps aux | grep 'echo "${answers.vpn_passwd}"' | awk '{print $2}')`, (err, stdout, stderr) => {
+                    });
                 });
                 nebula_process.stderr.on('data', function (data) {
                     //console.log(data.toString());
@@ -194,7 +201,7 @@ function start_nebula() {
                     //console.log('child process exited with ' +
                     //`code ${code} and signal ${signal}`);
                 });
-                nebula_process.unref();
+                //nebula_process.unref();
 
                 show_main_menu();
 
@@ -219,14 +226,14 @@ function show_main_menu() {
         {
             type: 'list',
             name: 'main_menu',
-            message: 'What do you want to do?',
+            message: 'What do you want to do? (CTRL + C to close this app)',
             choices: main_menu_choices
         }
     ]).then((answers) => {
         if (answers.main_menu === main_menu_choices[0]) {
             add_service();
         } else if (answers.main_menu === main_menu_choices[1]) {
-
+            list_services();
         }
     }).catch((error) => {
         if (error.isTtyError) {
@@ -342,5 +349,35 @@ Webhook URL:
             }).catch((error) => {
             });
 
+        });
+}
+
+function list_services() {
+    request
+        .get(`http://${root_node_static_ip}:5005/service`)
+        .set('accept', 'json')
+        .end((err, service_list) => {
+
+        var service_names = [];
+        service_list.body.forEach((service, index) => {
+            service_names.push(service.name);
+        })
+        inquirer.prompt([
+            {
+                type: 'list',
+                name: 'service_list',
+                message: 'Select service',
+                choices: service_names
+            }
+        ]).then((answers) => {
+            console.log('Selected service: ' + answers.service_list);
+        }).catch((error) => {
+            if (error.isTtyError) {
+                // Prompt couldn't be rendered in the current environment
+            } else {
+                // Something else went wrong
+            }
+        });
+        }).catch((error) => {
         });
 }
