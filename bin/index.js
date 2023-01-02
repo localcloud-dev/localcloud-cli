@@ -294,7 +294,7 @@ function add_service() {
                             {
                                 type: 'input',
                                 name: 'domain',
-                                message: 'Enter a domain:\n'
+                                message: 'Enter a domain (example: project.domain.com, you should add A record to DNS before deploying - check deployed.cc/docs/custom_domains):\n'
                             }
                         ]).then((answers) => {
 
@@ -402,7 +402,7 @@ function show_service_menu(service) {
         {
             type: 'list',
             name: 'service_menu',
-            message: `Selected service: ${service.name}`,
+            message: `Selected service: ${service.name}\n Git: ${service.git_url}\n Environments: ${service.environments.length}`,
             choices: service_menu
         }
     ]).then((answers) => {
@@ -438,16 +438,16 @@ function show_delete_confirmation(service) {
 
         if (answers.delete_confirmation) {
             request
-            .delete(`http://${root_node_static_ip}:5005/service/${service.id}`)
-            .set('accept', 'json')
-            .end((err, result) => {
-                if (err != null && result.body.msg != undefined){
-                    console.log(result.body.msg);
-                }else{
-                    console.log(`Service ${service.name} has been deleted`);
-                    show_main_menu();
-                }
-            });
+                .delete(`http://${root_node_static_ip}:5005/service/${service.id}`)
+                .set('accept', 'json')
+                .end((err, result) => {
+                    if (err != null && result.body.msg != undefined) {
+                        console.log(result.body.msg);
+                    } else {
+                        console.log(`Service ${service.name} has been deleted`);
+                        show_main_menu();
+                    }
+                });
         }
 
     }).catch((error) => {
@@ -480,6 +480,8 @@ function show_environments(service) {
             ]).then((answers) => {
                 if (answers.selected_environment === main_menu_item) {
                     show_main_menu();
+                } else if (answers.selected_environment === new_environment_item) {
+                    show_new_environment(service);
                 } else {
                     let selected_environment = environments.find(environment => environment.name === answers.selected_environment);
                     show_environment_menu(selected_environment, service);
@@ -503,7 +505,7 @@ function show_environment_menu(environment, service) {
         {
             type: 'list',
             name: 'environment_menu',
-            message: `What do you want to do with "${environment.name}" environment in "${service.name}" service`,
+            message: `What do you want to do with "${environment.name}" environment in "${service.name}" service?\nEnvironment URL: ${environment.domain}\nGit branch:  ${environment.branch}\nPort: ${environment.port}`,
             choices: environment_menu
         }
     ]).then((answers) => {
@@ -524,7 +526,88 @@ function show_environment_menu(environment, service) {
 
 }
 
-function show_delete_environment_confirmation(environment, service){
+function show_new_environment(service) {
+
+    var environment_name = '';
+    var environment_branch = '';
+    var environment_port = '';
+    var environment_domain = '';
+
+    //Ask a branch name
+    inquirer.prompt([
+        {
+            type: 'input',
+            name: 'name',
+            message: 'Enter name:\n'
+        }
+    ]).then((answers) => {
+        environment_name = answers.name;
+
+        //Ask a branch name
+        inquirer.prompt([
+            {
+                type: 'input',
+                name: 'branch',
+                message: 'Enter git branch:\n'
+            }
+        ]).then((answers) => {
+            environment_branch = answers.branch;
+
+            //Ask a port
+            inquirer.prompt([
+                {
+                    type: 'input',
+                    name: 'port',
+                    message: 'Enter service/app port:\n'
+                }
+            ]).then((answers) => {
+                environment_port = answers.port;
+
+                //Ask a service name
+                inquirer.prompt([
+                    {
+                        type: 'input',
+                        name: 'domain',
+                        message: 'Enter a domain (example: project.domain.com, you should add A record to DNS before deploying - check deployed.cc/docs/custom_domains):\n'
+                    }
+                ]).then((answers) => {
+                    environment_domain = answers.domain;
+
+                    var new_environment = {};
+                    new_environment.name = environment_name;
+                    new_environment.branch = environment_branch;
+                    new_environment.port = environment_port;
+                    new_environment.domain = environment_domain;
+
+                    //Send a request to create a new environment
+                    request
+                        .post(`http://${root_node_static_ip}:5005/environment/${service.id}`)
+                        .send(new_environment)
+                        .set('accept', 'json')
+                        .end((err, result) => {
+                            if (err != null) {
+                                console.log(result.body.msg);
+                                show_environments(service);
+                            } else {
+                                console.log(`"${environment_name}" environment in "${service.name}" service has been created and will be accessible at ${environment_domain} shortly.`);
+                                show_environments(service);
+                            }
+                        });
+
+                }).catch((error) => {
+                });
+
+            }).catch((error) => {
+            });
+
+        }).catch((error) => {
+        });
+    }).catch((error) => {
+    });
+
+}
+
+function show_delete_environment_confirmation(environment, service) {
     console.log("");
     inquirer.prompt([
         {
@@ -537,16 +620,16 @@ function show_delete_environment_confirmation(environment, service){
 
         if (answers.delete_environment_confirmation) {
             request
-            .delete(`http://${root_node_static_ip}:5005/environment/${service.id}/${environment.name}`)
-            .set('accept', 'json')
-            .end((err, result) => {
-                if (err != null && result.body.msg != undefined){
-                    console.log(result.body.msg);
-                }else{
-                    console.log(`"${environment.name}" environment in "${service.name}" service has been deleted`);
-                    show_main_menu();
-                }
-            });
+                .delete(`http://${root_node_static_ip}:5005/environment/${service.id}/${environment.name}`)
+                .set('accept', 'json')
+                .end((err, result) => {
+                    if (err != null && result.body.msg != undefined) {
+                        console.log(result.body.msg);
+                    } else {
+                        console.log(`"${environment.name}" environment in "${service.name}" service has been deleted`);
+                        show_main_menu();
+                    }
+                });
         }
 
     }).catch((error) => {
