@@ -28,6 +28,9 @@ const root_node_static_ip = "192.168.202.1";
 const main_menu_item = "← Main Menu";
 const new_environment_item = "+ New Environment";
 
+const new_tunnel_item = "+ New Tunnel";
+
+
 const isRunning = (query, cb) => {
     let platform = process.platform;
     let cmd = '';
@@ -149,7 +152,6 @@ function download_vpn_certificates() {
 
                             });
                     }
-
                 });
 
             });
@@ -219,8 +221,9 @@ function start_nebula() {
 
 function show_main_menu() {
     const main_menu_choices = [
-        'Deploy service',
-        'Manage services'
+        'New service',
+        'Services',
+        'Tunnels'
     ];
 
     inquirer.prompt([
@@ -235,6 +238,8 @@ function show_main_menu() {
             add_service();
         } else if (answers.main_menu === main_menu_choices[1]) {
             list_services();
+        } else if (answers.main_menu === main_menu_choices[2]) {
+            show_tunnels();
         }
     }).catch((error) => {
         if (error.isTtyError) {
@@ -303,7 +308,7 @@ function add_service() {
                             const ssh_pub_key = chalk.hex('#127475')(`${credentials.body.ssh_pub_key}`);
                             const webhook_url = chalk.hex('#127475')(`${credentials.body.webhook_url}`);
                             const hint = chalk.hex('#000')(`
-To deploy a new service/app, add a public key of the server and webhook URL listed below to the Git repository Access Keys and Webhooks. Check docs at deployed.cc/docs/connect_repo if you don't know how to do this.
+To deploy a new service/app, add a public key of the server and webhook URL listed below to the Git repository Access Keys (Bitbucket) / Deploy Keys (GitHub) and Webhooks. Check docs at deployed.cc/docs/connect_repo if you don't know how to do this.
         
 Public Key:
         
@@ -589,7 +594,7 @@ function show_new_environment(service) {
                                 console.log(result.body.msg);
                                 show_environments(service);
                             } else {
-                                console.log(`"${environment_name}" environment in "${service.name}" service has been created and will be accessible at ${environment_domain} shortly.`);
+                                console.log(`"${environment_name}" environment in "${service.name}" service has been created and will be accessible at https://${environment_domain} shortly.`);
                                 show_environments(service);
                             }
                         });
@@ -627,6 +632,179 @@ function show_delete_environment_confirmation(environment, service) {
                         console.log(result.body.msg);
                     } else {
                         console.log(`"${environment.name}" environment in "${service.name}" service has been deleted`);
+                        show_main_menu();
+                    }
+                });
+        }
+
+    }).catch((error) => {
+    });
+}
+
+function show_tunnels() {
+    console.log("");
+    request
+        .get(`http://${root_node_static_ip}:5005/tunnel`)
+        .set('accept', 'json')
+        .end((err, tunnels_response) => {
+            const tunnels = tunnels_response.body;
+            var tunnel_names = [];
+            tunnel_names.push(new_tunnel_item);
+            tunnel_names.push(new inquirer.Separator());
+            tunnels.forEach((tunnel, index) => {
+                tunnel_names.push(`${tunnel.domain} -> localhost:${tunnel.port}`);
+            })
+            tunnel_names.push(new inquirer.Separator());
+            tunnel_names.push(main_menu_item);
+            console.log("");
+            inquirer.prompt([
+                {
+                    type: 'list',
+                    name: 'selected_tunnel',
+                    message: 'Add a tunnel or select a tunnel from the list below to edit/delete',
+                    choices: tunnel_names
+                }
+            ]).then((answers) => {
+                if (answers.selected_tunnel === main_menu_item) {
+                    show_main_menu();
+                } else if (answers.selected_tunnel === new_tunnel_item) {
+                    show_new_tunnel();
+                } else {
+                    let selected_tunnel = tunnels.find(tunnel => `${tunnel.domain} -> localhost:${tunnel.port}` === answers.selected_tunnel);
+                    show_tunnel_menu(selected_tunnel);
+                }
+            }).catch((error) => {
+                if (error.isTtyError) {
+                    // Prompt couldn't be rendered in the current environment
+                } else {
+                    // Something else went wrong
+                }
+            });
+        })
+}
+
+function show_new_tunnel() {
+
+    var tunnel_name = '';
+    var tunnel_port = '';
+    var tunnel_domain = '';
+    var vpn_ip = '';
+
+    //Load VPN IP from host.key
+    exec(`${homedir}/.deployed/./nebula-cert print -json -path ${homedir}/.deployed/host.crt`, {
+        cwd: homedir
+    }, (err, stdout, stderr) => {
+        if (err != null){
+            console.log(`Cannot load host VPN IP address. Error: ${err}`);
+            show_main_menu();
+        }else{
+            if (stdout != undefined){
+                const host_details = JSON.parse(stdout);
+                const ip_subnet = host_details.details.ips[0];
+                vpn_ip = ip_subnet.replace("/24", "");
+
+                //Ask a port
+    inquirer.prompt([
+        {
+            type: 'input',
+            name: 'port',
+            message: 'Enter local port:\n'
+        }
+    ]).then((answers) => {
+        tunnel_port = answers.port;
+
+        //Ask a service name
+        inquirer.prompt([
+            {
+                type: 'input',
+                name: 'domain',
+                message: 'Enter a domain (example: project.domain.com, you should add A record to DNS before deploying - check deployed.cc/docs/custom_domains):\n'
+            }
+        ]).then((answers) => {
+            tunnel_domain = answers.domain;
+
+            var new_tunnel = {};
+            new_tunnel.name = tunnel_name;
+            new_tunnel.port = tunnel_port;
+            new_tunnel.domain = tunnel_domain;
+            new_tunnel.vpn_ip = vpn_ip;
+
+            //Send a request to create a new environment
+            request
+                .post(`http://${root_node_static_ip}:5005/tunnel`)
+                .send(new_tunnel)
+                .set('accept', 'json')
+                .end((err, result) => {
+                    if (err != null) {
+                        console.log(result.body.msg);
+                        show_tunnels();
+                    } else {
+                        console.log(`A tunnel for localhost:${tunnel_port} has been created and will be accessible at https://${tunnel_domain} shortly.`);
+                        show_tunnels();
+                    }
+                });
+
+        }).catch((error) => {
+        });
+
+    }).catch((error) => {
+    });
+            }
+        }
+    });
+
+}
+
+function show_tunnel_menu(tunnel) {
+    console.log("");
+    var tunnel_menu = ["Delete tunnel"];
+    tunnel_menu.push(new inquirer.Separator());
+    tunnel_menu.push(main_menu_item);
+    inquirer.prompt([
+        {
+            type: 'list',
+            name: 'tunnel_menu',
+            message: `What do you want to do with a tunnel for localhost:${tunnel.port}, a public domain: ${tunnel.domain}`,
+            choices: tunnel_menu
+        }
+    ]).then((answers) => {
+
+        if (answers.tunnel_menu === main_menu_item) {
+            show_main_menu();
+        } else if (answers.tunnel_menu === tunnel_menu[0]) {
+            show_delete_tunnel_confirmation(tunnel);
+        }
+
+    }).catch((error) => {
+        if (error.isTtyError) {
+            // Prompt couldn't be rendered in the current environment
+        } else {
+            // Something else went wrong
+        }
+    });
+
+}
+
+function show_delete_tunnel_confirmation(tunnel) {
+    console.log("");
+    inquirer.prompt([
+        {
+            type: 'confirm',
+            name: 'delete_tunnel_confirmation',
+            message: `Do you really want to delete a tunnel for localhost:${tunnel.port}?\n`,
+            default: false
+        }
+    ]).then((answers) => {
+
+        if (answers.delete_tunnel_confirmation) {
+            request
+                .delete(`http://${root_node_static_ip}:5005/tunnel/${tunnel.id}`)
+                .set('accept', 'json')
+                .end((err, result) => {
+                    if (err != null && result.body.msg != undefined) {
+                        console.log(result.body.msg);
+                    } else {
+                        console.log(`The tunnel for localhost:${tunnel.port} has been deleted`);
                         show_main_menu();
                     }
                 });
