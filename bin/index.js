@@ -221,9 +221,10 @@ function start_nebula() {
 
 function show_main_menu() {
     const main_menu_choices = [
-        'New service',
-        'Services',
-        'Tunnels'
+        'New Service/App',
+        'Services/Apps',
+        'Servers/Local Machines',
+        'Localhost Tunnels'
     ];
 
     inquirer.prompt([
@@ -239,6 +240,8 @@ function show_main_menu() {
         } else if (answers.main_menu === main_menu_choices[1]) {
             list_services();
         } else if (answers.main_menu === main_menu_choices[2]) {
+            list_servers_local_machines();
+        } else if (answers.main_menu === main_menu_choices[3]) {
             show_tunnels();
         }
     }).catch((error) => {
@@ -639,6 +642,47 @@ function show_delete_environment_confirmation(environment, service) {
 
     }).catch((error) => {
     });
+}
+
+//Servers and local machines
+function list_servers_local_machines() {
+    request
+        .get(`http://${root_node_static_ip}:5005/vpn_node`)
+        .set('accept', 'json')
+        .end((err, servers_list) => {
+
+            const servers = servers_list.body;
+            var server_names = [];
+            servers.forEach((server, index) => {
+                server_names.push(server.name);
+            })
+            server_names.push(new inquirer.Separator());
+            server_names.push(main_menu_item);
+
+            console.log("");
+            inquirer.prompt([
+                {
+                    type: 'list',
+                    name: 'selected_server',
+                    message: 'Select server or local machine',
+                    choices: server_names
+                }
+            ]).then((answers) => {
+                if (answers.selected_server === main_menu_item) {
+                    show_main_menu();
+                } else {
+                    //let selected_service = services.find(service => service.name === answers.selected_service);
+                    //show_service_menu(selected_service);
+                }
+
+            }).catch((error) => {
+                if (error.isTtyError) {
+                    // Prompt couldn't be rendered in the current environment
+                } else {
+                    // Something else went wrong
+                }
+            });
+        })
 }
 
 function show_tunnels() {
