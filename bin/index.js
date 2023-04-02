@@ -10,6 +10,7 @@ const platform = require('os').platform();
 const fs = require('fs');
 const exec = require('child_process').exec;
 const { spawn } = require('child_process');
+const is_valid_hostname = require('../utils/utils');
 
 const url = require('node:url');
 
@@ -17,9 +18,9 @@ const usage = chalk.hex('#001219')(`
 To deploy the first project your local machine should join VPN.
 Run the command below to join:
 
-    deploy --join invite_link
+    deploy -j invite_link
 
-where invite_link is URL that you can request on a root service-node.
+where invite_link is URL that you can request on a root (usually the first) service-node.
 
 More details at deployed.cc/docs
 `);
@@ -29,6 +30,8 @@ const main_menu_item = "← Main Menu";
 const new_environment_item = "+ New Environment";
 
 const new_tunnel_item = "+ New Tunnel";
+const new_server_item = "+ Server (where you host web services and apps; Ubuntu 22.04 LTS is required)";
+const new_local_machine_item = "+ Local Machine (laptops, desktop computers; Ubuntu 22.04 or macOS is required)";
 
 
 const isRunning = (query, cb) => {
@@ -653,8 +656,11 @@ function list_servers_local_machines() {
 
             const servers = servers_list.body;
             var server_names = [];
+            server_names.push(new_server_item);
+            server_names.push(new_local_machine_item);
+            server_names.push(new inquirer.Separator());
             servers.forEach((server, index) => {
-                server_names.push(server.name);
+                server_names.push(`• ${server.name}: ${server.ip} : ${server.type}`);
             })
             server_names.push(new inquirer.Separator());
             server_names.push(main_menu_item);
@@ -664,15 +670,19 @@ function list_servers_local_machines() {
                 {
                     type: 'list',
                     name: 'selected_server',
-                    message: 'Select server or local machine',
+                    message: 'Select server/local machine or add a new one',
                     choices: server_names
                 }
             ]).then((answers) => {
                 if (answers.selected_server === main_menu_item) {
                     show_main_menu();
+                } else if (answers.selected_server === new_server_item) {
+                    show_add_server();
+                } else if (answers.selected_server === new_local_machine_item) {
+                    show_add_local_machine();
                 } else {
-                    //let selected_service = services.find(service => service.name === answers.selected_service);
-                    //show_service_menu(selected_service);
+                    //let selected_machine = servers.find(server => server.name === answers.selected_server.replace('• ', ''));
+                    console.log("!!!" + answers.selected_server);
                 }
 
             }).catch((error) => {
@@ -683,6 +693,93 @@ function list_servers_local_machines() {
                 }
             });
         })
+}
+
+function show_add_server() {
+    add_vpn_node("server");
+}
+
+function show_add_local_machine() {
+    add_vpn_node("local_machine");
+}
+
+function add_vpn_node(type) {
+    //Send a request to create a new environment
+
+    //Ask a port
+    inquirer.prompt([
+        {
+            type: 'input',
+            name: 'machine_name',
+            message: `Enter name (alphabetic characters (A-Z), numeric characters (0-9), the minus sign (-)):\n`
+        }
+    ]).then((answers) => {
+        const machine_name = answers.machine_name;
+        if (is_valid_hostname(machine_name) == false){
+            console.log("The name includes invalid characters. Try another name.");
+            add_vpn_node(type);
+            return;
+        }
+
+        request
+        .post(`http://${root_node_static_ip}:5005/vpn_node`)
+        .send({ name: machine_name, type: type })
+        .set('accept', 'json')
+        .end((err, result) => {
+            if (err != null) {
+                console.log(result.body.msg);
+                list_servers_local_machines();
+            } else {
+                msg = '';
+                if (type == "local_machine"){
+                    msg = `\n\n\nFollow steps bellow to connect a new local machine:\n
+- install Deploy CLI on your local machine. Deploy CLI works on Ubuntu and macOS. Run in Terminal/Console (NPM should be installed on your system):
+    
+    npm install -g https://github.com/deployed-cc/deployed-cli
+    
+- check that Deployed CLI is installed:
+
+    deploy -v
+
+Note: If you see a message like 'command not found: deploy' try to install Deployed CLI with sudo: 'sudo npm install -g https://github.com/deployed-cc/deployed-cli'
+
+- connect your local machine to your Deployed VPN:
+
+    deploy -j ${result.body.zip_url}
+
+- to start Deploy CLI next time:
+
+    deploy
+
+- more informtaion can be found at deployed.cc/docs
+
+
+`;
+                }else if (type == "server"){
+                    msg = `\n\n\nFollow steps bellow to connect a new server:\n
+- SSH into a server with "fresh" Ubuntu 22.04 and run a command:
+    
+curl https://bitbucket.org/coded-sh/service-node/raw/master/public/provision/deployed-service-node-install.sh | sh -s join ${result.body.zip_url}
+
+- more informtaion can be found at deployed.cc/docs
+
+
+`;
+                }
+
+                console.log(msg);
+                list_servers_local_machines();
+            }
+        });
+
+    }).catch((error) => {
+        if (error.isTtyError) {
+            // Prompt couldn't be rendered in the current environment
+        } else {
+            // Something else went wrong
+        }
+    });
+
 }
 
 function show_tunnels() {
@@ -705,7 +802,7 @@ function show_tunnels() {
                 {
                     type: 'list',
                     name: 'selected_tunnel',
-                    message: 'Add a tunnel or select a tunnel from the list below to edit/delete',
+                    message: 'Create a new tunnel or select a tunnel from the list below to edit/delete',
                     choices: tunnel_names
                 }
             ]).then((answers) => {
@@ -738,61 +835,61 @@ function show_new_tunnel() {
     exec(`${homedir}/.deployed/./nebula-cert print -json -path ${homedir}/.deployed/host.crt`, {
         cwd: homedir
     }, (err, stdout, stderr) => {
-        if (err != null){
+        if (err != null) {
             console.log(`Cannot load host VPN IP address. Error: ${err}`);
             show_main_menu();
-        }else{
-            if (stdout != undefined){
+        } else {
+            if (stdout != undefined) {
                 const host_details = JSON.parse(stdout);
                 const ip_subnet = host_details.details.ips[0];
                 vpn_ip = ip_subnet.replace("/24", "");
 
                 //Ask a port
-    inquirer.prompt([
-        {
-            type: 'input',
-            name: 'port',
-            message: 'Enter local port:\n'
-        }
-    ]).then((answers) => {
-        tunnel_port = answers.port;
-
-        //Ask a service name
-        inquirer.prompt([
-            {
-                type: 'input',
-                name: 'domain',
-                message: 'Enter a domain (example: project.domain.com, you should add A record to DNS before deploying - check deployed.cc/docs/custom_domains):\n'
-            }
-        ]).then((answers) => {
-            tunnel_domain = answers.domain;
-
-            var new_tunnel = {};
-            new_tunnel.name = tunnel_name;
-            new_tunnel.port = tunnel_port;
-            new_tunnel.domain = tunnel_domain;
-            new_tunnel.vpn_ip = vpn_ip;
-
-            //Send a request to create a new environment
-            request
-                .post(`http://${root_node_static_ip}:5005/tunnel`)
-                .send(new_tunnel)
-                .set('accept', 'json')
-                .end((err, result) => {
-                    if (err != null) {
-                        console.log(result.body.msg);
-                        show_tunnels();
-                    } else {
-                        console.log(`A tunnel for localhost:${tunnel_port} has been created and will be accessible at https://${tunnel_domain} shortly.`);
-                        show_tunnels();
+                inquirer.prompt([
+                    {
+                        type: 'input',
+                        name: 'port',
+                        message: 'Enter local port:\n'
                     }
+                ]).then((answers) => {
+                    tunnel_port = answers.port;
+
+                    //Ask a service name
+                    inquirer.prompt([
+                        {
+                            type: 'input',
+                            name: 'domain',
+                            message: 'Enter a domain (example: project.domain.com, you should add A record to DNS before deploying - check deployed.cc/docs/custom_domains):\n'
+                        }
+                    ]).then((answers) => {
+                        tunnel_domain = answers.domain;
+
+                        var new_tunnel = {};
+                        new_tunnel.name = tunnel_name;
+                        new_tunnel.port = tunnel_port;
+                        new_tunnel.domain = tunnel_domain;
+                        new_tunnel.vpn_ip = vpn_ip;
+
+                        //Send a request to create a new environment
+                        request
+                            .post(`http://${root_node_static_ip}:5005/tunnel`)
+                            .send(new_tunnel)
+                            .set('accept', 'json')
+                            .end((err, result) => {
+                                if (err != null) {
+                                    console.log(result.body.msg);
+                                    show_tunnels();
+                                } else {
+                                    console.log(`A tunnel for localhost:${tunnel_port} has been created and will be accessible at https://${tunnel_domain} shortly.`);
+                                    show_tunnels();
+                                }
+                            });
+
+                    }).catch((error) => {
+                    });
+
+                }).catch((error) => {
                 });
-
-        }).catch((error) => {
-        });
-
-    }).catch((error) => {
-    });
             }
         }
     });
