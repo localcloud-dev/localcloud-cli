@@ -18,7 +18,7 @@ const usage = chalk.hex('#001219')(`
 To deploy the first project your local machine should join VPN.
 Run the command below to join:
 
-    deploy -j invite_link
+    sudo deploy -j invite_link
 
 where invite_link is URL that you can request on a root (usually the first) service-node.
 
@@ -81,6 +81,11 @@ if (invite_link == undefined || invite_link == '') {
         return;
     }
 } else {
+    //Check that CLI is run with admin permissions otherwise we cannot install Nebula
+    if (process.getuid() != 0){
+        console.log("Use 'sudo' to connect this machine with VPN. More info: https://localcloud.dev/docs");
+        return;
+    }
     download_vpn_certificates();
 }
 
@@ -118,7 +123,7 @@ function download_vpn_certificates() {
                 //var zip = new adm_zip(zip_file);
                 //zip.extractAllTo(`${homedir}/.deployed`,true);
 
-                decompress(zip_file, `${homedir}/.deployed`).then(files => {
+                decompress(zip_file, `/etc/nebula`).then(files => {
                     //Download Nebula
                     switch (platform) {
                         case 'darwin':
@@ -162,7 +167,7 @@ function download_vpn_certificates() {
 }
 
 function check_nebula_certificates() {
-    if (fs.existsSync(`${homedir}/.deployed/ca.crt`) && fs.existsSync(`${homedir}/.deployed/config.yaml`)) {
+    if (fs.existsSync(`/etc/nebula/ca.crt`) && fs.existsSync(`/etc/nebula/config.yaml`)) {
         return true;
     }
     return false;
@@ -176,7 +181,11 @@ function start_nebula() {
         //Start Nebula
         try {
 
-            //Ask an admin password to start Nebula
+            //Check that CLI is run with admin permissions, if not - ask for the admin password
+            if (process.getuid() == 0){
+                start_nebula_process();
+            }else{
+                //Ask an admin password to start Nebula
             inquirer.prompt([
                 {
                     type: 'password',
@@ -186,40 +195,48 @@ function start_nebula() {
             ]).then((answers) => {
 
                 console.log("\nStarting a VPN agent...\n");
-
-                const nebula_process = spawn(`echo "${answers.vpn_passwd}" | sudo -S ls && sudo ${homedir}/.deployed/./nebula`, [`-config`, `config.yaml`], {
-                    detached: true,
-                    cwd: `${homedir}/.deployed`,
-                    shell: true
-                });
-
-                nebula_process.stdout.on('data', function (data) {
-                    //console.log(data.toString());
-                    //Avoid showing a command in 'ps -ax'
-                    exec(`kill $(ps aux | grep 'echo "${answers.vpn_passwd}"' | awk '{print $2}')`, (err, stdout, stderr) => {
-                    });
-                });
-                nebula_process.stderr.on('data', function (data) {
-                    //console.log(data.toString());
-                });
-
-                nebula_process.on('exit', function (code, signal) {
-                    //console.log('child process exited with ' +
-                    //`code ${code} and signal ${signal}`);
-                });
-                //nebula_process.unref();
-
-                show_main_menu();
+                start_nebula_process(answers);
 
             }).catch((error) => {
 
             });
+            }
 
         } catch (error) {
             console.log(error);
         }
 
     });
+}
+
+function start_nebula_process(answers){
+    var passwd_cmd = '';
+    if (answers != undefined){
+        passwd_cmd = `echo "${answers.vpn_passwd}" | sudo -S ls && `;
+    }
+    const nebula_process = spawn(`${passwd_cmd}sudo ${homedir}/.deployed/./nebula`, [`-config`, `/etc/nebula/config.yaml`], {
+        detached: true,
+        cwd: `${homedir}/.deployed`,
+        shell: true
+    });
+
+    nebula_process.stdout.on('data', function (data) {
+        //console.log(data.toString());
+        //Avoid showing a command in 'ps -ax'
+        exec(`kill $(ps aux | grep 'echo "${answers.vpn_passwd}"' | awk '{print $2}')`, (err, stdout, stderr) => {
+        });
+    });
+    nebula_process.stderr.on('data', function (data) {
+        //console.log(data.toString());
+    });
+
+    nebula_process.on('exit', function (code, signal) {
+        //console.log('child process exited with ' +
+        //`code ${code} and signal ${signal}`);
+    });
+    //nebula_process.unref();
+
+    show_main_menu();
 }
 
 function show_main_menu() {
@@ -311,9 +328,36 @@ function add_service() {
 
                             domain = answers.domain;
 
-                            const ssh_pub_key = chalk.hex('#127475')(`${credentials.body.ssh_pub_key}`);
-                            const webhook_url = chalk.hex('#127475')(`${credentials.body.webhook_url}`);
-                            const hint = chalk.hex('#000')(`
+                            //Select servers to deploy
+                            request
+                                .get(`http://${root_node_static_ip}:5005/vpn_node`)
+                                .set('accept', 'json')
+                                .end((err, servers_list) => {
+
+                                    const servers = servers_list.body;
+                                    var server_names = [];
+
+                                    servers.forEach((server, index) => {
+                                        server_names.push(`• ${server.name}: ${server.ip} : ${server.type.join(', ')}`);
+                                    })
+
+                                    console.log("");
+                                    inquirer.prompt([
+                                        {
+                                            type: 'list',
+                                            name: 'selected_server',
+                                            message: 'Select a server where to deploy a service/app',
+                                            choices: server_names
+                                        }
+                                    ]).then((answers) => {
+                                        let index = server_names.indexOf(answers.selected_server);
+                                        console.log("!!!" + servers[index].id);
+                                        const server_id = servers[index].id;
+
+
+                                        const ssh_pub_key = chalk.hex('#127475')(`${credentials.body.ssh_pub_key}`);
+                                        const webhook_url = chalk.hex('#127475')(`${credentials.body.webhook_url}`);
+                                        const hint = `
 To deploy a new service/app, add a public key of the server and webhook URL listed below to the Git repository Access Keys (Bitbucket) / Deploy Keys (GitHub) and Webhooks. Check docs at deployed.cc/docs/connect_repo if you don't know how to do this.
         
 Public Key:
@@ -324,35 +368,42 @@ Webhook URL:
         
     ${webhook_url}
         
-`);
+`;
 
-                            console.log(hint);
+                                        console.log(hint);
 
-                            inquirer.prompt([
-                                {
-                                    type: 'confirm',
-                                    name: 'ready_deploy',
-                                    message: 'Have you added a public key and webhook URL above?\n',
-                                    default: true
-                                }
-                            ]).then((answers) => {
+                                        inquirer.prompt([
+                                            {
+                                                type: 'confirm',
+                                                name: 'ready_deploy',
+                                                message: 'Have you added a public key and webhook URL above?\n',
+                                                default: true
+                                            }
+                                        ]).then((answers) => {
 
-                                request
-                                    .post(`http://${root_node_static_ip}:5005/service`)
-                                    .send({ git_url: git_url, environments: [{ "name": branch, "branch": branch, "domain": domain, "port": port }] }) // sends a JSON post body
-                                    .set('accept', 'json')
-                                    .end(function (err, res) {
-                                        // Calling the end function will send the request
-                                        console.log(`\nThe service should be available at ${domain} within 30 seconds. Each time you push to master the service will be updated automatically.\n`);
-                                        show_main_menu();
+                                            request
+                                                .post(`http://${root_node_static_ip}:5005/service`)
+                                                .send({ git_url: git_url, environments: [{ "name": branch, "branch": branch, "domain": domain, "port": port, "servers": [{"id":server_id, "status":"to_deploy"}], "image_id":"",}]}) // sends a JSON post body
+                                                .set('accept', 'json')
+                                                .end(function (err, res) {
+                                                    // Calling the end function will send the request
+                                                    console.log(`\nThe service should be available at ${domain} within 30 seconds. Each time you push to master the service will be updated automatically.\n`);
+                                                    show_main_menu();
+                                                });
+
+                                        }).catch((error) => {
+                                        });
+
+                                    }).catch((error) => {
+                                        if (error.isTtyError) {
+                                            // Prompt couldn't be rendered in the current environment
+                                        } else {
+                                            // Something else went wrong
+                                        }
                                     });
-
-                            }).catch((error) => {
-                            });
-
+                                });
                         }).catch((error) => {
                         });
-
 
                     }).catch((error) => {
                     });
@@ -660,7 +711,7 @@ function list_servers_local_machines() {
             server_names.push(new_local_machine_item);
             server_names.push(new inquirer.Separator());
             servers.forEach((server, index) => {
-                server_names.push(`• ${server.name}: ${server.ip} : ${server.type}`);
+                server_names.push(`• ${server.name}: ${server.ip} : ${server.type.join(', ')}`);
             })
             server_names.push(new inquirer.Separator());
             server_names.push(main_menu_item);
@@ -715,62 +766,62 @@ function add_vpn_node(type) {
         }
     ]).then((answers) => {
         const machine_name = answers.machine_name;
-        if (is_valid_hostname(machine_name) == false){
+        if (is_valid_hostname(machine_name) == false) {
             console.log("The name includes invalid characters. Try another name.");
             add_vpn_node(type);
             return;
         }
 
         request
-        .post(`http://${root_node_static_ip}:5005/vpn_node`)
-        .send({ name: machine_name, type: type })
-        .set('accept', 'json')
-        .end((err, result) => {
-            if (err != null) {
-                console.log(result.body.msg);
-                list_servers_local_machines();
-            } else {
-                msg = '';
-                if (type == "local_machine"){
-                    msg = `\n\n\nFollow steps bellow to connect a new local machine:\n
+            .post(`http://${root_node_static_ip}:5005/vpn_node`)
+            .send({ name: machine_name, type: type })
+            .set('accept', 'json')
+            .end((err, result) => {
+                if (err != null) {
+                    console.log(result.body.msg);
+                    list_servers_local_machines();
+                } else {
+                    msg = '';
+                    if (type == "local_machine") {
+                        msg = `\n\n\nFollow steps bellow to connect a new local machine:\n
 - install Deploy CLI on your local machine. Deploy CLI works on Ubuntu and macOS. Run in Terminal/Console (NPM should be installed on your system):
     
-    npm install -g https://github.com/deployed-cc/deployed-cli
+    npm install -g https://github.com/localcloud-dev/localcloud-cli
     
 - check that Deployed CLI is installed:
 
     deploy -v
 
-Note: If you see a message like 'command not found: deploy' try to install Deployed CLI with sudo: 'sudo npm install -g https://github.com/deployed-cc/deployed-cli'
+Note: If you see a message like 'command not found: deploy' try to install Deployed CLI with sudo: 'sudo npm install -g https://github.com/localcloud-dev/localcloud-cli'
 
 - connect your local machine to your Deployed VPN:
 
-    deploy -j ${result.body.zip_url}
+    sudo deploy -j ${result.body.zip_url}
 
 - to start Deploy CLI next time:
 
     deploy
 
-- more informtaion can be found at deployed.cc/docs
+- more information can be found at deployed.cc/docs
 
 
 `;
-                }else if (type == "server"){
-                    msg = `\n\n\nFollow steps bellow to connect a new server:\n
+                    } else if (type == "server") {
+                        msg = `\n\n\nFollow steps bellow to connect a new server:\n
 - SSH into a server with "fresh" Ubuntu 22.04 and run a command:
     
 curl https://bitbucket.org/coded-sh/service-node/raw/master/public/provision/deployed-service-node-install.sh | sh -s join ${result.body.zip_url}
 
-- more informtaion can be found at deployed.cc/docs
+- more information can be found at deployed.cc/docs
 
 
 `;
-                }
+                    }
 
-                console.log(msg);
-                list_servers_local_machines();
-            }
-        });
+                    console.log(msg);
+                    list_servers_local_machines();
+                }
+            });
 
     }).catch((error) => {
         if (error.isTtyError) {
