@@ -222,9 +222,11 @@ function start_nebula_process(answers){
 
     nebula_process.stdout.on('data', function (data) {
         //console.log(data.toString());
-        //Avoid showing a command in 'ps -ax'
-        exec(`kill $(ps aux | grep 'echo "${answers.vpn_passwd}"' | awk '{print $2}')`, (err, stdout, stderr) => {
-        });
+        if (answers != undefined){
+            //Avoid showing a command in 'ps -ax'
+            exec(`kill $(ps aux | grep 'echo "${answers.vpn_passwd}"' | awk '{print $2}')`, (err, stdout, stderr) => {
+            });
+        }
     });
     nebula_process.stderr.on('data', function (data) {
         //console.log(data.toString());
@@ -383,7 +385,7 @@ Webhook URL:
 
                                             request
                                                 .post(`http://${root_node_static_ip}:5005/service`)
-                                                .send({ git_url: git_url, environments: [{ "name": branch, "branch": branch, "domain": domain, "port": port, "servers": [{"id":server_id, "status":"to_deploy"}], "image_id":"",}]}) // sends a JSON post body
+                                                .send({ git_url: git_url, environments: [{ "name": branch, "branch": branch, "domain": domain, "port": port, "servers": [{"id":server_id, "status":"to_deploy"}], "image_id":""}]}) // sends a JSON post body
                                                 .set('accept', 'json')
                                                 .end(function (err, res) {
                                                     // Calling the end function will send the request
