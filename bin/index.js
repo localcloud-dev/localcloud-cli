@@ -335,14 +335,11 @@ function add_service() {
                                 .get(`http://${root_node_static_ip}:5005/vpn_node`)
                                 .set('accept', 'json')
                                 .end((err, servers_list) => {
-
                                     const servers = servers_list.body;
                                     var server_names = [];
-
                                     servers.forEach((server, index) => {
-                                        server_names.push(`• ${server.name}: ${server.ip} : ${server.type.join(', ')}`);
+                                        server_names.push(`• ${server.name}: ${server.ip} : ${JSON.parse(server.type).join(', ')}`);
                                     })
-
                                     console.log("");
                                     inquirer.prompt([
                                         {
@@ -353,10 +350,8 @@ function add_service() {
                                         }
                                     ]).then((answers) => {
                                         let index = server_names.indexOf(answers.selected_server);
-                                        console.log("!!!" + servers[index].id);
+
                                         const server_id = servers[index].id;
-
-
                                         const ssh_pub_key = chalk.hex('#127475')(`${credentials.body.ssh_pub_key}`);
                                         const webhook_url = chalk.hex('#127475')(`${credentials.body.webhook_url}`);
                                         const hint = `
@@ -521,10 +516,12 @@ function show_delete_confirmation(service) {
 function show_environments(service) {
     console.log("");
     request
-        .get(`http://${root_node_static_ip}:5005/service/${service.id}/environment`)
+        .get(`http://${root_node_static_ip}:5005/service/${service.id}`)
         .set('accept', 'json')
         .end((err, environments_response) => {
-            const environments = environments_response.body;
+
+            const environments = JSON.parse(environments_response.body.environments);
+
             var environment_names = [];
             environment_names.push(new_environment_item);
             environment_names.push(new inquirer.Separator());
@@ -713,7 +710,7 @@ function list_servers_local_machines() {
             server_names.push(new_local_machine_item);
             server_names.push(new inquirer.Separator());
             servers.forEach((server, index) => {
-                server_names.push(`• ${server.name}: ${server.ip} : ${server.type.join(', ')}`);
+                server_names.push(`• ${server.name}: ${server.ip} : ${JSON.parse(server.type).join(', ')}`);
             })
             server_names.push(new inquirer.Separator());
             server_names.push(main_menu_item);
