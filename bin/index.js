@@ -782,21 +782,22 @@ function add_vpn_node(type) {
                 } else {
                     msg = '';
                     if (type == "local_machine") {
-                        msg = `\nFollow steps bellow to connect a new local machine:\n
-- install LocalCloud CLI on your local machine. LocalCloud CLI works on Ubuntu and macOS. Run in Terminal/Console (NPM should be installed on your system):
+                        msg = `\n
+=^..^=   =^..^=   =^..^=    =^..^=    =^..^=    =^..^=    =^..^=\n
+\nFollow steps bellow to connect a new local machine:\n
+  - install LocalCloud CLI on your local machine. LocalCloud CLI works on Ubuntu and macOS. Run in Terminal/Console (NPM should be installed on your system):
     
     sudo npm install -g https://github.com/localcloud-dev/localcloud-cli
     
-- connect your local machine to your LocalCloud VPN:
+  - connect your local machine to your LocalCloud VPN:
 
     sudo localcloud -j ${result.body.zip_url}
 
-- to start LocalCloud CLI next time:
+  - to start LocalCloud CLI next time:
 
     localcloud
 
-- more information can be found at localcloud.dev/docs
-
+  - more information can be found at localcloud.dev/docs
 `;
                     } else if (type == "server") {
                         msg = `\n\n\nFollow steps bellow to connect a new server:\n
@@ -810,7 +811,12 @@ curl https://bitbucket.org/coded-sh/service-node/raw/master/public/provision/dep
                     }
 
                     console.log(msg);
-                    list_servers_local_machines();
+                    
+                    //Focus a user on instructions for a few seconds
+                    exec(`sleep 2`, (err, stdout, stderr) => {
+                        list_servers_local_machines();
+                    });
+
                 }
             });
 
