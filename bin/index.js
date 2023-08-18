@@ -15,14 +15,14 @@ const is_valid_hostname = require('../utils/utils');
 const url = require('node:url');
 
 const usage = chalk.hex('#001219')(`
-To deploy the first project your local machine should join VPN.
+To deploy the first project your local machine should be connected to LocalCloud VPN.
 Run the command below to join:
 
-    sudo deploy -j invite_link
+    sudo localcloud -j invite_link
 
 where invite_link is URL that you can request on a root (usually the first) service-node.
 
-More details at deployed.cc/docs
+More details at localcloud.dev/docs
 `);
 
 const root_node_static_ip = "192.168.202.1";
@@ -190,7 +190,7 @@ function start_nebula() {
                 {
                     type: 'password',
                     name: 'vpn_passwd',
-                    message: 'Enter your admin password to start VPN agent (check docs at deployed.cc/docs/vpn if you want to know more details)'
+                    message: 'Enter your admin password to start VPN agent (check docs at localcloud.dev/docs if you want to know more details)'
                 }
             ]).then((answers) => {
 
@@ -287,7 +287,7 @@ function add_service() {
         .set('accept', 'json')
         .end((err, credentials) => {
 
-            console.log(`\nEnter Git clone URL. Use https:// for public repositories and git@ for private repositories.\nExamples:\n - public repository: https://github.com/ladjs/superagent.git\n - private repository: git@bitbucket.org:deployed/service-node.git\n`);
+            console.log(`\nEnter Git clone URL. Use https:// for public repositories and git@ for private repositories.\nExamples:\n - public repository: https://github.com/ladjs/superagent.git\n - private repository: git@bitbucket.org:user/service-node.git\n`);
 
             //Ask a service name
             inquirer.prompt([
@@ -324,7 +324,7 @@ function add_service() {
                             {
                                 type: 'input',
                                 name: 'domain',
-                                message: 'Enter a domain (example: project.domain.com, you should add A record to DNS before deploying - check deployed.cc/docs/custom_domains):\n'
+                                message: 'Enter a domain (example: project.domain.com, you should add A record to DNS before deploying - check localcloud.dev/docs/custom_domains):\n'
                             }
                         ]).then((answers) => {
 
@@ -355,7 +355,7 @@ function add_service() {
                                         const ssh_pub_key = chalk.hex('#127475')(`${credentials.body.ssh_pub_key}`);
                                         const webhook_url = chalk.hex('#127475')(`${credentials.body.webhook_url}`);
                                         const hint = `
-To deploy a new service/app, add a public key of the server and webhook URL listed below to the Git repository Access Keys (Bitbucket) / Deploy Keys (GitHub) and Webhooks. Check docs at deployed.cc/docs/connect_repo if you don't know how to do this.
+To deploy a new service/app, add a public key of the server and webhook URL listed below to the Git repository Access Keys (Bitbucket) / Deploy Keys (GitHub) and Webhooks. Check docs at localcloud.dev/docs if you don't know how to do this.
         
 Public Key:
         
@@ -629,7 +629,7 @@ function show_new_environment(service) {
                     {
                         type: 'input',
                         name: 'domain',
-                        message: 'Enter a domain (example: project.domain.com, you should add A record to DNS before deploying - check deployed.cc/docs/custom_domains):\n'
+                        message: 'Enter a domain (example: project.domain.com, you should add A record to DNS before deploying - check localcloud.dev/docs):\n'
                     }
                 ]).then((answers) => {
                     environment_domain = answers.domain;
@@ -782,27 +782,20 @@ function add_vpn_node(type) {
                 } else {
                     msg = '';
                     if (type == "local_machine") {
-                        msg = `\n\n\nFollow steps bellow to connect a new local machine:\n
-- install Deploy CLI on your local machine. Deploy CLI works on Ubuntu and macOS. Run in Terminal/Console (NPM should be installed on your system):
+                        msg = `\nFollow steps bellow to connect a new local machine:\n
+- install LocalCloud CLI on your local machine. LocalCloud CLI works on Ubuntu and macOS. Run in Terminal/Console (NPM should be installed on your system):
     
-    npm install -g https://github.com/localcloud-dev/localcloud-cli
+    sudo npm install -g https://github.com/localcloud-dev/localcloud-cli
     
-- check that Deployed CLI is installed:
+- connect your local machine to your LocalCloud VPN:
 
-    deploy -v
+    sudo localcloud -j ${result.body.zip_url}
 
-Note: If you see a message like 'command not found: deploy' try to install Deployed CLI with sudo: 'sudo npm install -g https://github.com/localcloud-dev/localcloud-cli'
+- to start LocalCloud CLI next time:
 
-- connect your local machine to your Deployed VPN:
+    localcloud
 
-    sudo deploy -j ${result.body.zip_url}
-
-- to start Deploy CLI next time:
-
-    deploy
-
-- more information can be found at deployed.cc/docs
-
+- more information can be found at localcloud.dev/docs
 
 `;
                     } else if (type == "server") {
@@ -811,8 +804,7 @@ Note: If you see a message like 'command not found: deploy' try to install Deplo
     
 curl https://bitbucket.org/coded-sh/service-node/raw/master/public/provision/deployed-service-node-install.sh | sh -s join ${result.body.zip_url}
 
-- more information can be found at deployed.cc/docs
-
+- more information can be found at localcloud.dev/docs
 
 `;
                     }
@@ -909,7 +901,7 @@ function show_new_tunnel() {
                         {
                             type: 'input',
                             name: 'domain',
-                            message: 'Enter a domain (example: project.domain.com, you should add A record to DNS before deploying - check deployed.cc/docs/custom_domains):\n'
+                            message: 'Enter a domain (example: project.domain.com, you should add A record to DNS before deploying - check localcloud.dev/docs):\n'
                         }
                     ]).then((answers) => {
                         tunnel_domain = answers.domain;
