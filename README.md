@@ -73,20 +73,12 @@ curl https://raw.githubusercontent.com/localcloud-dev/localcloud-agent/main/publ
 ```
 **service_node_domain** will be used for Bitbucket, Github and other webhooks, should be without http and https, for example: agent.test.project.com or deploy.domain.com, etc
 
-- Wait until the LocalCloud agent finishes the server provision and follow the steps in the final message. If everything goes well, you'll see something like this:
-```
-To deploy a first project you should:
-
-- install LocalCloud CLI on your local machine (on your laptop, iMac, Desktop computer etc.). Run in Terminal/Console (NPM should be installed on your system):
-      
-    npm install -g https://github.com/localcloud-dev/localcloud-cli
-
-...
+- Wait until the LocalCloud agent finishes the server provision and deploy the first project
 ```
 
 #### How to deploy a project with the managed LocalCloud
 
-- Will be available from July, 2023
+- Will be available from September, 2023
 
 
 ### License

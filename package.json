@@ -1,16 +1,16 @@
 {
-  "name": "deploy-cli",
-  "version": "0.2.0",
-  "description": "",
+  "name": "localcloud-cli",
+  "version": "0.5.0",
+  "description": "CLI for localcloud.dev - open-source scalable PaaS",
   "main": "bin/index.js",
   "bin": {
-    "deploy": "./bin/index.js"
+    "localcloud": "./bin/index.js"
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"No tests yet\" && exit 1"
   },
-  "author": "",
-  "license": "ISC",
+  "author": "LocalCloud UG",
+  "license": "Server Side Public License",
   "dependencies": {
     "chalk": "^4.1.2",
     "decompress": "^4.2.1",
