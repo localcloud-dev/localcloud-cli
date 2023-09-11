@@ -520,7 +520,7 @@ function show_environments(service) {
         .set('accept', 'json')
         .end((err, environments_response) => {
 
-            const environments = JSON.parse(environments_response.body.environments);
+            const environments = environments_response.body.environments;
 
             var environment_names = [];
             environment_names.push(new_environment_item);
@@ -783,7 +783,7 @@ function show_add_server() {
 }
 
 function show_add_local_machine() {
-    add_vpn_node("local_machine");
+    add_vpn_node("local_machine"); 
 }
 
 function add_vpn_node(type) {
