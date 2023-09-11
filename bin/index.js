@@ -82,7 +82,7 @@ if (invite_link == undefined || invite_link == '') {
     }
 } else {
     //Check that CLI is run with admin permissions otherwise we cannot install Nebula
-    if (process.getuid() != 0){
+    if (process.getuid() != 0) {
         console.log("Use 'sudo' to connect this machine with VPN. More info: https://localcloud.dev/docs");
         return;
     }
@@ -182,24 +182,24 @@ function start_nebula() {
         try {
 
             //Check that CLI is run with admin permissions, if not - ask for the admin password
-            if (process.getuid() == 0){
+            if (process.getuid() == 0) {
                 start_nebula_process();
-            }else{
+            } else {
                 //Ask an admin password to start Nebula
-            inquirer.prompt([
-                {
-                    type: 'password',
-                    name: 'vpn_passwd',
-                    message: 'Enter your admin password to start VPN agent (check docs at localcloud.dev/docs if you want to know more details)'
-                }
-            ]).then((answers) => {
+                inquirer.prompt([
+                    {
+                        type: 'password',
+                        name: 'vpn_passwd',
+                        message: 'Enter your admin password to start VPN agent (check docs at localcloud.dev/docs if you want to know more details)'
+                    }
+                ]).then((answers) => {
 
-                console.log("\nStarting a VPN agent...\n");
-                start_nebula_process(answers);
+                    console.log("\nStarting a VPN agent...\n");
+                    start_nebula_process(answers);
 
-            }).catch((error) => {
+                }).catch((error) => {
 
-            });
+                });
             }
 
         } catch (error) {
@@ -209,9 +209,9 @@ function start_nebula() {
     });
 }
 
-function start_nebula_process(answers){
+function start_nebula_process(answers) {
     var passwd_cmd = '';
-    if (answers != undefined){
+    if (answers != undefined) {
         passwd_cmd = `echo "${answers.vpn_passwd}" | sudo -S ls && `;
     }
     const nebula_process = spawn(`${passwd_cmd}sudo ${homedir}/.deployed/./nebula`, [`-config`, `/etc/nebula/config.yaml`], {
@@ -222,7 +222,7 @@ function start_nebula_process(answers){
 
     nebula_process.stdout.on('data', function (data) {
         //console.log(data.toString());
-        if (answers != undefined){
+        if (answers != undefined) {
             //Avoid showing a command in 'ps -ax'
             exec(`kill $(ps aux | grep 'echo "${answers.vpn_passwd}"' | awk '{print $2}')`, (err, stdout, stderr) => {
             });
@@ -380,7 +380,7 @@ Webhook URL:
 
                                             request
                                                 .post(`http://${root_node_static_ip}:5005/service`)
-                                                .send({ git_url: git_url, environments: [{ "name": branch, "branch": branch, "domain": domain, "port": port, "servers": [{"id":server_id, "status":"to_deploy"}], "image_id":""}]}) // sends a JSON post body
+                                                .send({ git_url: git_url, environments: [{ "name": branch, "branch": branch, "domain": domain, "port": port, "servers": [{ "id": server_id, "status": "to_deploy" }], "image_id": "" }] }) // sends a JSON post body
                                                 .set('accept', 'json')
                                                 .end(function (err, res) {
                                                     // Calling the end function will send the request
@@ -640,20 +640,53 @@ function show_new_environment(service) {
                     new_environment.port = environment_port;
                     new_environment.domain = environment_domain;
 
-                    //Send a request to create a new environment
+
+                    //Select servers to deploy
                     request
-                        .post(`http://${root_node_static_ip}:5005/environment/${service.id}`)
-                        .send(new_environment)
+                        .get(`http://${root_node_static_ip}:5005/vpn_node`)
                         .set('accept', 'json')
-                        .end((err, result) => {
-                            if (err != null) {
-                                console.log(result.body.msg);
-                                show_environments(service);
-                            } else {
-                                console.log(`"${environment_name}" environment in "${service.name}" service has been created and will be accessible at https://${environment_domain} shortly.`);
-                                show_environments(service);
-                            }
+                        .end((err, servers_list) => {
+                            const servers = servers_list.body;
+                            var server_names = [];
+                            servers.forEach((server, index) => {
+                                server_names.push(`• ${server.name}: ${server.ip} : ${JSON.parse(server.type).join(', ')}`);
+                            })
+                            console.log("");
+                            inquirer.prompt([
+                                {
+                                    type: 'list',
+                                    name: 'selected_server',
+                                    message: 'Select a server where to deploy a service/app',
+                                    choices: server_names
+                                }
+                            ]).then((answers) => {
+                                let index = server_names.indexOf(answers.selected_server);
+
+                                const server_id = servers[index].id;
+                                new_environment.servers = [{ "id": server_id, "status": "to_deploy" }];
+
+                                //Send a request to create a new environment
+                                request
+                                    .post(`http://${root_node_static_ip}:5005/environment/${service.id}`)
+                                    .send(new_environment)
+                                    .set('accept', 'json')
+                                    .end((err, result) => {
+                                        if (err != null) {
+                                            console.log(result.body.msg);
+                                            show_environments(service);
+                                        } else {
+                                            console.log(`"${environment_name}" environment in "${service.name}" service has been created and will be accessible at https://${environment_domain} shortly.`);
+                                            show_environments(service);
+                                        }
+                                    });
+
+
+
+                            }).catch((error) => {
+                            });
+
                         });
+
 
                 }).catch((error) => {
                 });
@@ -787,31 +820,33 @@ function add_vpn_node(type) {
 \nFollow steps bellow to connect a new local machine:\n
   - install LocalCloud CLI on your local machine. LocalCloud CLI works on Ubuntu and macOS. Run in Terminal/Console (NPM should be installed on your system):
     
-    sudo npm install -g https://github.com/localcloud-dev/localcloud-cli
+        sudo npm install -g https://github.com/localcloud-dev/localcloud-cli
     
   - connect your local machine to your LocalCloud VPN:
 
-    sudo localcloud -j ${result.body.zip_url}
+        sudo localcloud -j ${result.body.zip_url}
 
   - to start LocalCloud CLI next time:
 
-    localcloud
+        localcloud
 
   - more information can be found at localcloud.dev/docs
 `;
                     } else if (type == "server") {
-                        msg = `\n\n\nFollow steps bellow to connect a new server:\n
-- SSH into a server with "fresh" Ubuntu 22.04 and run a command:
+                        msg = `\n
+=^..^=   =^..^=   =^..^=    =^..^=    =^..^=    =^..^=    =^..^=\n
+\nFollow steps bellow to connect a new server:\n
+  - SSH into a server with "fresh" Ubuntu 22.04 and run a command:
     
-curl https://bitbucket.org/coded-sh/service-node/raw/master/public/provision/deployed-service-node-install.sh | sh -s join ${result.body.zip_url}
+        curl https://raw.githubusercontent.com/localcloud-dev/localcloud-agent/main/public/provision/deployed-service-node-install.sh | sh -s join ${result.body.zip_url}
 
-- more information can be found at localcloud.dev/docs
+  - more information can be found at localcloud.dev/docs
 
 `;
                     }
 
                     console.log(msg);
-                    
+
                     //Focus a user on instructions for a few seconds
                     exec(`sleep 2`, (err, stdout, stderr) => {
                         list_servers_local_machines();
@@ -892,6 +927,18 @@ function show_new_tunnel() {
                 const ip_subnet = host_details.details.ips[0];
                 vpn_ip = ip_subnet.replace("/24", "");
 
+                //Select servers to deploy
+                /*request
+                .get(`http://${root_node_static_ip}:5005/vpn_node`)
+                .set('accept', 'json')
+                .end((err, servers_list) => {
+                    const servers = servers_list.body;
+                    var server_names = [];
+                    servers.forEach((server, index) => {
+                        server_names.push(`• ${server.name}: ${server.ip} : ${JSON.parse(server.type).join(', ')}`);
+                    })
+
+                });*/
                 //Ask a port
                 inquirer.prompt([
                     {
