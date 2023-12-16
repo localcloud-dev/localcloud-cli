@@ -13,10 +13,7 @@
   "license": "Server Side Public License",
   "dependencies": {
     "chalk": "^4.1.2",
-    "decompress": "^4.2.1",
-    "decompress-targz": "^4.1.1",
     "inquirer": "^8.2.5",
-    "superagent": "^8.0.6",
-    "yargs": "^17.6.2"
+    "superagent": "^8.0.6"
   }
 }

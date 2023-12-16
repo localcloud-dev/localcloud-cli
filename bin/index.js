@@ -1,29 +1,10 @@
 #! /usr/bin/env node
-const yargs = require("yargs");
 const chalk = require('chalk');
 const inquirer = require("inquirer");
-const decompress = require('decompress');
-const decompressTargz = require('decompress-targz');
 const request = require('superagent');
 const homedir = require('os').homedir();
-const platform = require('os').platform();
-const fs = require('fs');
 const exec = require('child_process').exec;
-const { spawn } = require('child_process');
 const is_valid_hostname = require('../utils/utils');
-
-const url = require('node:url');
-
-const usage = chalk.hex('#001219')(`
-To deploy the first project your local machine should be connected to LocalCloud VPN.
-Run the command below to join:
-
-    sudo localcloud -j invite_link
-
-where invite_link is URL that you can request on a root (usually the first) service-node.
-
-More details at localcloud.dev/docs
-`);
 
 const root_node_static_ip = "192.168.202.1";
 const main_menu_item = "← Main Menu";
@@ -31,215 +12,9 @@ const new_environment_item = "+ New Environment";
 
 const new_tunnel_item = "+ New Tunnel";
 const new_server_item = "+ Server (where you host web services and apps; Ubuntu 22.04 LTS is required)";
-const new_local_machine_item = "+ Local Machine (laptops, desktop computers; Ubuntu 22.04 or macOS is required)";
+const new_local_machine_item = "+ Local Machine (laptops, desktop computers; Linux or macOS is required)";
 
-
-const isRunning = (query, cb) => {
-    let platform = process.platform;
-    let cmd = '';
-    switch (platform) {
-        case 'win32': cmd = `tasklist`; break;
-        case 'darwin': cmd = `ps -ax`; break;
-        case 'linux': cmd = `ps -A`; break;
-        default: break;
-    }
-    exec(cmd, (err, stdout, stderr) => {
-        cb(stdout.toLowerCase().indexOf(query.toLowerCase()) > -1);
-    });
-}
-
-
-yargs
-    .usage(usage)
-    .option("j", {
-        alias: "join", describe: "Join a VPN", type: "string", demandOption
-            : false
-    })
-    .command('start', 'Connect an agent to VPN')
-    .help(true)
-    .argv;
-
-
-//Parse params
-var invite_link = yargs.argv.join;
-if (invite_link == undefined) {
-    invite_link = yargs.argv.j;
-}
-
-if (invite_link == undefined || invite_link == '') {
-    //Check if we already have local Nebula config
-    if (check_nebula_certificates() == true) {
-        isRunning('nebula', (status) => {
-            if (status === true) {
-                show_main_menu();
-            } else {
-                start_nebula();
-            }
-        })
-    } else {
-        console.log(usage);
-        return;
-    }
-} else {
-    //Check that CLI is run with admin permissions otherwise we cannot install Nebula
-    if (process.getuid() != 0) {
-        console.log("Use 'sudo' to connect this machine with VPN. More info: https://localcloud.dev/docs");
-        return;
-    }
-    download_vpn_certificates();
-}
-
-function download_vpn_certificates() {
-    //Check if join_link is a valid URL
-    try {
-        url.parse(invite_link);
-    } catch (error) {
-        console.log(`\n"${invite_link}" isn't a valid URL. ${error}`);
-        console.log(usage);
-        return;
-    }
-
-    var nebula_download_url = '';
-    var nebula_archive = ``
-    var plugins = null;
-
-    //Download ZIP with files to connect to VPN
-    const zip_file = `${homedir}/deployed-join-vpn.zip`
-    request
-        .get(invite_link)
-        .on('error', function (error) {
-            console.log(error);
-            console.log("Looks like the server hasn't received a TLS certificate yet. Let's try again after 10 seconds ...")
-            setTimeout(function () {
-                download_vpn_certificates();
-            }, 10000);
-        })
-        .pipe(fs.createWriteStream(zip_file))
-        .on('finish', function () {
-            exec(`chmod +x ${zip_file}`, {
-                cwd: homedir
-            }, function (err, stdout, stderr) {
-                //Extract zip to ~/.deployed
-                //var zip = new adm_zip(zip_file);
-                //zip.extractAllTo(`${homedir}/.deployed`,true);
-
-                decompress(zip_file, `/etc/nebula`).then(files => {
-                    //Download Nebula
-                    switch (platform) {
-                        case 'darwin':
-                            nebula_download_url = `https://github.com/slackhq/nebula/releases/download/v1.6.1/nebula-darwin.zip`;
-                            nebula_archive = `${homedir}/nebula.zip`;
-                            break;
-                        case 'linux':
-                            nebula_download_url = `https://github.com/slackhq/nebula/releases/download/v1.6.1/nebula-linux-amd64.tar.gz`;
-                            nebula_archive = `${homedir}/nebula.tar.gz`;
-                            plugins = { plugins: [decompressTargz()] };
-                            break;
-                        case 'freebsd':
-                            nebula_download_url = `https://github.com/slackhq/nebula/releases/download/v1.6.1/nebula-freebsd-amd64.tar.gz`;
-                            nebula_archive = `${homedir}/nebula.tar.gz`;
-                            plugins = { plugins: [decompressTargz()] };
-                            break;
-                    }
-
-                    if (nebula_download_url != '') {
-                        request
-                            .get(nebula_download_url)
-                            .on('error', function (error) {
-                                console.log(error);
-                            })
-                            .pipe(fs.createWriteStream(nebula_archive))
-                            .on('finish', function () {
-                                //Extract zip to ~/.deployed
-                                //var zip = new adm_zip(nebula_archive);
-                                //zip.extractAllTo(`${homedir}/.deployed`, /*overwrite*/ true);
-
-                                decompress(nebula_archive, `${homedir}/.deployed`, plugins).then(files => {
-                                    start_nebula();
-                                });
-
-                            });
-                    }
-                });
-
-            });
-        });
-}
-
-function check_nebula_certificates() {
-    if (fs.existsSync(`/etc/nebula/ca.crt`) && fs.existsSync(`/etc/nebula/config.yaml`)) {
-        return true;
-    }
-    return false;
-}
-
-function start_nebula() {
-    exec(`chmod +x ${homedir}/.deployed/nebula`, {
-        cwd: homedir
-    }, function (err, stdout, stderr) {
-
-        //Start Nebula
-        try {
-
-            //Check that CLI is run with admin permissions, if not - ask for the admin password
-            if (process.getuid() == 0) {
-                start_nebula_process();
-            } else {
-                //Ask an admin password to start Nebula
-                inquirer.prompt([
-                    {
-                        type: 'password',
-                        name: 'vpn_passwd',
-                        message: 'Enter your admin password to start VPN agent (check docs at localcloud.dev/docs if you want to know more details)'
-                    }
-                ]).then((answers) => {
-
-                    console.log("\nStarting a VPN agent...\n");
-                    start_nebula_process(answers);
-
-                }).catch((error) => {
-
-                });
-            }
-
-        } catch (error) {
-            console.log(error);
-        }
-
-    });
-}
-
-function start_nebula_process(answers) {
-    var passwd_cmd = '';
-    if (answers != undefined) {
-        passwd_cmd = `echo "${answers.vpn_passwd}" | sudo -S ls && `;
-    }
-    const nebula_process = spawn(`${passwd_cmd}sudo ${homedir}/.deployed/./nebula`, [`-config`, `/etc/nebula/config.yaml`], {
-        detached: true,
-        cwd: `${homedir}/.deployed`,
-        shell: true
-    });
-
-    nebula_process.stdout.on('data', function (data) {
-        //console.log(data.toString());
-        if (answers != undefined) {
-            //Avoid showing a command in 'ps -ax'
-            exec(`kill $(ps aux | grep 'echo "${answers.vpn_passwd}"' | awk '{print $2}')`, (err, stdout, stderr) => {
-            });
-        }
-    });
-    nebula_process.stderr.on('data', function (data) {
-        //console.log(data.toString());
-    });
-
-    nebula_process.on('exit', function (code, signal) {
-        //console.log('child process exited with ' +
-        //`code ${code} and signal ${signal}`);
-    });
-    //nebula_process.unref();
-
-    show_main_menu();
-}
+show_main_menu();
 
 function show_main_menu() {
     const main_menu_choices = [
@@ -566,7 +341,7 @@ function show_environment_menu(environment, service) {
         {
             type: 'list',
             name: 'environment_menu',
-            message: `What do you want to do with "${environment.name}" environment in "${service.name}" service?\nEnvironment URL: ${environment.domain}\nGit branch:  ${environment.branch}\nPort: ${environment.port}`,
+            message: `What do you want to do with "${environment.name}" environment in "${service.name}" service?\nEnvironment URL: https://${environment.domain}\nGit branch:  ${environment.branch}\nPort: ${environment.port}`,
             choices: environment_menu
         }
     ]).then((answers) => {
@@ -724,6 +499,8 @@ function show_delete_environment_confirmation(environment, service) {
                         show_main_menu();
                     }
                 });
+        }else{
+            show_environment_menu(environment, service);
         }
 
     }).catch((error) => {
@@ -818,13 +595,10 @@ function add_vpn_node(type) {
                         msg = `\n
 =^..^=   =^..^=   =^..^=    =^..^=    =^..^=    =^..^=    =^..^=\n
 \nFollow steps bellow to connect a new local machine:\n
-  - install LocalCloud CLI on your local machine. LocalCloud CLI works on Ubuntu and macOS. Run in Terminal/Console (NPM should be installed on your system):
+  - install LocalCloud CLI on your local machine. LocalCloud CLI works on Ubuntu and macOS, admin permissions are required to install. Run in Terminal/Console:
     
-        sudo npm install -g https://github.com/localcloud-dev/localcloud-cli
-    
-  - connect your local machine to your LocalCloud VPN:
-
-        sudo localcloud -j ${result.body.zip_url}
+        Linux: curl https://localcloud.dev/setup/linux | sh -s join ${result.body.zip_url}
+        MacOS: curl https://localcloud.dev/setup/mac | sh -s join ${result.body.zip_url}
 
   - to start LocalCloud CLI next time:
 
@@ -838,7 +612,7 @@ function add_vpn_node(type) {
 \nFollow steps bellow to connect a new server:\n
   - SSH into a server with "fresh" Ubuntu 22.04 and run a command:
     
-        curl https://raw.githubusercontent.com/localcloud-dev/localcloud-agent/main/public/provision/deployed-service-node-install.sh | sh -s join ${result.body.zip_url}
+        curl https://localcloud.dev/install | sh -s join ${result.body.zip_url}
 
   - more information can be found at localcloud.dev/docs
 
@@ -848,7 +622,7 @@ function add_vpn_node(type) {
                     console.log(msg);
 
                     //Focus a user on instructions for a few seconds
-                    exec(`sleep 2`, (err, stdout, stderr) => {
+                    exec(`sleep 1`, (err, stdout, stderr) => {
                         list_servers_local_machines();
                     });
 
