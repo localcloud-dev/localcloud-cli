@@ -689,7 +689,7 @@ function show_new_tunnel() {
     var vpn_ip = '';
 
     //Load VPN IP from host.key
-    exec(`${homedir}/.deployed/./nebula-cert print -json -path ${homedir}/.deployed/host.crt`, {
+    exec(`nebula-cert print -json -path /etc/nebula/host.crt`, {
         cwd: homedir
     }, (err, stdout, stderr) => {
         if (err != null) {
