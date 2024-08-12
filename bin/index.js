@@ -103,7 +103,7 @@ function add_service() {
                             }
                         ]).then((answers) => {
 
-                            domain = answers.domain;
+                            domains = [answers.domain];
 
                             //Select servers to deploy
                             request
@@ -155,11 +155,11 @@ Webhook URL:
 
                                             request
                                                 .post(`http://${root_node_static_ip}:5005/service`)
-                                                .send({ git_url: git_url, environments: [{ "name": branch, "branch": branch, "domain": domain, "port": port, "servers": [{ "id": server_id, "status": "to_deploy" }], "image_id": "" }] }) // sends a JSON post body
+                                                .send({ git_url: git_url, environments: [{ "name": branch, "branch": branch, "domains": domains, "port": port, "servers": [{ "id": server_id, "status": "to_deploy" }], "image_id": "" }] }) // sends a JSON post body
                                                 .set('accept', 'json')
                                                 .end(function (err, res) {
                                                     // Calling the end function will send the request
-                                                    console.log(`\nThe service should be available at ${domain} within 30 seconds. Each time you push to master the service will be updated automatically.\n`);
+                                                    console.log(`\nThe service should be available at ${domains[0]} within 30 seconds. Each time you push to master the service will be updated automatically.\n`);
                                                     show_main_menu();
                                                 });
 
@@ -341,7 +341,7 @@ function show_environment_menu(environment, service) {
         {
             type: 'list',
             name: 'environment_menu',
-            message: `What do you want to do with "${environment.name}" environment in "${service.name}" service?\nEnvironment URL: https://${environment.domain}\nGit branch:  ${environment.branch}\nPort: ${environment.port}`,
+            message: `What do you want to do with "${environment.name}" environment in "${service.name}" service?\nEnvironment URL: https://${environment.domains[0]}\nGit branch:  ${environment.branch}\nPort: ${environment.port}`,
             choices: environment_menu
         }
     ]).then((answers) => {
@@ -413,7 +413,7 @@ function show_new_environment(service) {
                     new_environment.name = environment_name;
                     new_environment.branch = environment_branch;
                     new_environment.port = environment_port;
-                    new_environment.domain = environment_domain;
+                    new_environment.domains = [environment_domain];
 
 
                     //Select servers to deploy
