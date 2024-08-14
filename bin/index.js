@@ -612,7 +612,7 @@ function add_vpn_node(type) {
 \nFollow steps bellow to connect a new server:\n
   - SSH into a server with "fresh" Ubuntu 22.04 and run a command:
     
-        curl https://localcloud.dev/install | sh -s join ${result.body.zip_url}
+        curl https://localcloud.dev/install | sh -s -- -j ${result.body.zip_url}
 
   - more information can be found at localcloud.dev/docs
 
